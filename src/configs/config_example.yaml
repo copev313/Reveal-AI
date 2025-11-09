@@ -1,0 +1,21 @@
+data:
+  dataset: mnist
+  data_dir: ./data
+  transform:
+    - normalize
+    - flatten
+
+train:
+  batch_size: [64, 128, 256]
+  lr: [0.001, 0.0005, 0.0001]
+  n_epochs: [10, 20, 30]
+
+network:
+  model: diffusion
+
+optimizer:
+  type: 'adamw'
+  weight_decay: 0.0
+
+scheduler:
+  type: 'cosine_annealing'
