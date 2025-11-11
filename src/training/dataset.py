@@ -36,7 +36,7 @@ class ImageDataModule(pl.LightningDataModule):
         self.data_dir = self.config["data"]["path"]
         self.batch_size = self.config["data"]["batch_size"]
         self.num_workers = self.config["data"]["num_workers"]
-        self.validation_split = self.config["data"]["validation_split"]
+        self.val_split = self.config["data"]["validation_split"]
         self.transforms = None
 
     def setup(self, stage=None):

@@ -12,32 +12,95 @@ class ImageClassifier(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
         self.config = config
-        self.model = timm.create_model(
-            model_name=self.config["model"]["name"],
-            pretrained=self.config["model"]["pretrained"],
-            num_classes=self.config["model"]["num_classes"],
-        )
+        self.lr = self.config["training"].get("learning_rate", 5e-4)
+        self.opt_name = self.config["training"].get("optimizer_type", "adam").lower()
+        self.wt_decay = self.config["training"].get("weight_decay", 0.0)
+        self.sched_name = self.config["training"].get("scheduler_type", "").lower()
         self.loss_func = nn.CrossEntropyLoss()
 
+        self.num_classes = self.config["model"].get("num_classes", 0)
+        self.backbone = timm.create_model(
+            model_name=self.config["model"]["name"],
+            pretrained=self.config["model"].get("pretrained", True),
+            num_classes=self.num_classes,
+        )
+        self.custom_head = None
+
     def forward(self, x):
-        return self.model(x)
+        feats_out = self.backbone(x)
+        # TODO: Potentially add custom head...
+        # ...
+        return feats_out
+
+    def _add_metrics(self, preds, labels) -> tuple[float, float]:
+        """Calculate accuracy and F1 score."""
+        n_classes = self.num_classes
+        task = "binary" if n_classes == 2 else "multiclass"
+        acc = accuracy(preds, labels, task=task, num_classes=n_classes)
+        f1 = f1_score(preds, labels, task=task, num_classes=n_classes)
+        return acc, f1
+
+    def _common_step(self, batch, batch_idx, stage: str):
+        images, labels = batch
+        # Forward pass:
+        outputs = self(images)
+        # Best class wins:
+        preds = torch.argmax(outputs, dim=1)
+        # Calculate loss:
+        loss = self.loss_func(preds, labels)
+        # Calculate metrics:
+        acc, f1 = self._add_metrics(preds, labels)
+        self.log(f"{stage}_loss", loss, prog_bar=True, on_step=False, on_epoch=True)
+        self.log(f"{stage}_acc", acc, prog_bar=True, on_step=False, on_epoch=True)
+        self.log(f"{stage}_f1", f1, prog_bar=True, on_step=False, on_epoch=True)
+        return loss
 
     def training_step(self, batch, batch_idx):
-        images, labels = batch
-        outputs = self(images)
-        loss = self.loss_func(outputs, labels)
-        # self.log(...)
-        # ...
-        return loss
+        return self._common_step(batch, batch_idx, stage="train")
 
     def validation_step(self, batch, batch_idx):
-        images, labels = batch
-        outputs = self(images)
-        loss = self.loss_func(outputs, labels)
-        # self.log(...)
-        # ...
-        return loss
+        return self._common_step(batch, batch_idx, stage="val")
 
-    # def configure_optimizers(self):
-    #     optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
-    #     return optimizer
+    def configure_optimizers(self):
+        # Select optimizer by name:
+        if self.opt_name == "adam":
+            optimizer = torch.optim.Adam(
+                params=self.parameters(),
+                lr=self.lr,
+                weight_decay=self.wt_decay,
+            )
+        elif self.opt_name == "adamw":
+            optimizer = torch.optim.AdamW(
+                params=self.parameters(),
+                lr=self.lr,
+                weight_decay=self.wt_decay,
+            )
+        elif self.opt_name == "sgd":
+            optimizer = torch.optim.SGD(
+                params=self.parameters(),
+                lr=self.lr,
+                weight_decay=self.wt_decay,
+                momentum=0.9,
+            )
+        else:
+            raise NotImplementedError(f"Optimizer '{self.opt_name}' not implemented.")
+
+        # Setup scheduler (if specified):
+        if not self.sched_name:
+            return optimizer
+
+        if self.sched_name == "step":
+            scheduler = torch.optim.lr_scheduler.StepLR(
+                optimizer=optimizer,
+                step_size=self.config["training"].get("step_size", 10),
+                gamma=self.config["training"].get("gamma", 0.1),
+            )
+        elif self.sched_name == "cosine":
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer=optimizer,
+                T_max=self.config["training"].get("t_max", 50),
+            )
+        else:
+            raise NotImplementedError(f"Scheduler '{self.sched_name}' not implemented.")
+
+        return {"optimizer": optimizer, "lr_scheduler": scheduler}
