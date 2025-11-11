@@ -3,6 +3,7 @@ data:
   batch_size: 128
   num_workers: 4
   validation_split: 0.2
+  image_size: 256
   transforms:
     - normalize
     - flatten
@@ -10,20 +11,20 @@ data:
 model:
   name: 'vit_small_patch16_224'
   pretrained: true
-  num_classes: 
+  num_classes: 2
 
 training:
   optimizer_type: 'adamw'
-  scheduler_type: 'cosine_annealing'
+  # scheduler_type: 'cosine_annealing'
   learning_rate: 0.001
-  weight_decay: 0.0001
-  min_epochs: 5
-  max_epochs: 50
+  # weight_decay: 0.0001
+  # min_epochs: 5
+  # max_epochs: 50
 
 seed: 7643
-device: 'cuda'
+# device: 'cuda'
 logging:
   type: 'CSV'
   save_checkpoint: true
-  checkpoint_path: ./checkpoints
-  logs_path: ./logs
+  checkpoint_dir: checkpoints
+  logs_dir: logs
