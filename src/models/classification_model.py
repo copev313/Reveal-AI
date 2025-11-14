@@ -12,42 +12,39 @@ class ImageClassifier(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
         self.config = config
-        self.lr = self.config["training"].get("learning_rate", 5e-4)
-        self.opt_name = self.config["training"].get("optimizer_type", "adam").lower()
-        self.wt_decay = self.config["training"].get("weight_decay", 0.0)
+        self.lr = float(self.config["training"].get("learning_rate", 1e-4))
+        self.opt_name = self.config["training"].get("optimizer_type", "adamw").lower()
+        self.wt_decay = float(self.config["training"].get("weight_decay", 0))
         self.sched_name = self.config["training"].get("scheduler_type", "").lower()
         self.loss_func = nn.CrossEntropyLoss()
 
         self.num_classes = self.config["model"].get("num_classes", 0)
         self.backbone = timm.create_model(
             model_name=self.config["model"]["name"],
-            pretrained=self.config["model"].get("pretrained", True),
+            pretrained=self.config["model"].get("pretrained", False),
             num_classes=self.num_classes,
         )
-        self.custom_head = None
 
     def forward(self, x):
-        feats_out = self.backbone(x)
-        # TODO: Potentially add custom head...
-        # ...
-        return feats_out
+        out = self.backbone(x)
+        return out
 
     def _add_metrics(self, preds, labels) -> tuple[float, float]:
         """Calculate accuracy and F1 score."""
         n_classes = self.num_classes
-        task = "binary" if n_classes == 2 else "multiclass"
-        acc = accuracy(preds, labels, task=task, num_classes=n_classes)
-        f1 = f1_score(preds, labels, task=task, num_classes=n_classes)
+        task_type = "multiclass" if n_classes > 2 else "binary"
+        acc = accuracy(preds, labels, task=task_type, num_classes=n_classes)
+        f1 = f1_score(preds, labels, task=task_type, num_classes=n_classes)
         return acc, f1
 
     def _common_step(self, batch, batch_idx, stage: str):
         images, labels = batch
         # Forward pass:
-        outputs = self(images)
-        # Best class wins:
-        preds = torch.argmax(outputs, dim=1)
+        logits = self(images)
         # Calculate loss:
-        loss = self.loss_func(preds, labels)
+        loss = self.loss_func(logits, labels)
+        # Highest prob. class wins:
+        preds = torch.argmax(logits, dim=1)
         # Calculate metrics:
         acc, f1 = self._add_metrics(preds, labels)
         self.log(f"{stage}_loss", loss, prog_bar=True, on_step=False, on_epoch=True)

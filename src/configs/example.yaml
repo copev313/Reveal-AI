@@ -1,30 +1,33 @@
 data:
-  path: ./data/mnist
+  path: src/data/chameleon
   batch_size: 128
   num_workers: 4
   validation_split: 0.2
-  image_size: 256
-  transforms:
-    - normalize
-    - flatten
+  image_size: 224
+  shuffle: true
 
 model:
-  name: 'vit_small_patch16_224'
+  name: 'convnext_tiny'
   pretrained: true
   num_classes: 2
 
 training:
   optimizer_type: 'adamw'
-  # scheduler_type: 'cosine_annealing'
-  learning_rate: 0.001
+  # scheduler_type: 'cosine'
+  learning_rate: 1e-4
   # weight_decay: 0.0001
   # min_epochs: 5
-  # max_epochs: 50
+  max_epochs: 5
+  lr_monitoring: true
+  early_stopping:
+    enabled: true
+    patience: 5
+    monitor: 'val_loss'
+    mode: 'min'
 
 seed: 7643
 # device: 'cuda'
 logging:
   type: 'CSV'
-  save_checkpoint: true
-  checkpoint_dir: checkpoints
-  logs_dir: logs
+  checkpoint_dir: src/checkpoints
+  logs_dir: src/logs
