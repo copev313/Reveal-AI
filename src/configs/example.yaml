@@ -1,8 +1,8 @@
 data:
   path: src/data/chameleon
-  batch_size: 128
+  batch_size: 96
   num_workers: 4
-  validation_split: 0.2
+  validation_split: 0.25
   image_size: 224
   shuffle: true
 
@@ -14,14 +14,14 @@ model:
 training:
   optimizer_type: 'adamw'
   # scheduler_type: 'cosine'
-  learning_rate: 1e-4
+  learning_rate: 5e-5
   # weight_decay: 0.0001
-  # min_epochs: 5
+  min_epochs: 3
   max_epochs: 5
   lr_monitoring: true
   early_stopping:
     enabled: true
-    patience: 5
+    patience: 3
     monitor: 'val_loss'
     mode: 'min'
 

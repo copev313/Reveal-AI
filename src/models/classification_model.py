@@ -29,7 +29,7 @@ class ImageClassifier(pl.LightningModule):
         out = self.backbone(x)
         return out
 
-    def _add_metrics(self, preds, labels) -> tuple[float, float]:
+    def _add_metrics(self, preds, labels):
         """Calculate accuracy and F1 score."""
         n_classes = self.num_classes
         task_type = "multiclass" if n_classes > 2 else "binary"
@@ -46,10 +46,10 @@ class ImageClassifier(pl.LightningModule):
         # Highest prob. class wins:
         preds = torch.argmax(logits, dim=1)
         # Calculate metrics:
-        acc, f1 = self._add_metrics(preds, labels)
+        acc, _ = self._add_metrics(preds, labels)
         self.log(f"{stage}_loss", loss, prog_bar=True, on_step=False, on_epoch=True)
         self.log(f"{stage}_acc", acc, prog_bar=True, on_step=False, on_epoch=True)
-        self.log(f"{stage}_f1", f1, prog_bar=True, on_step=False, on_epoch=True)
+        # self.log(f"{stage}_f1", f1, prog_bar=True, on_step=False, on_epoch=True)
         return loss
 
     def training_step(self, batch, batch_idx):
