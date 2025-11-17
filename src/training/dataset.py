@@ -2,10 +2,9 @@ import os
 import torch
 import pytorch_lightning as pl
 import numpy as np
-import torchvision as tv
-
-from torch.utils.data import DataLoader, random_split, Dataset, WeightedRandomSampler
 from torchvision.datasets import ImageFolder
+from torch.utils.data import DataLoader, random_split, Dataset, WeightedRandomSampler
+# from torchvision import transforms
 from PIL import Image
 from albumentations import Compose, Resize, Normalize
 from albumentations.pytorch import ToTensorV2
@@ -16,9 +15,9 @@ class CustomImageDataset(Dataset):
 
     def __init__(self, root_dir: str, transforms=None):
         self.root_dir = root_dir
+        self.transforms = transforms
         self.img_folder = ImageFolder(root=self.root_dir)
         self.samples = self.img_folder.samples
-        self.transforms = transforms
 
     def __len__(self):
         return len(self.samples)
@@ -51,6 +50,7 @@ class ImageDataModule(pl.LightningDataModule):
         self.img_size = self.config["data"]["image_size"]
         self.num_workers = self.config["data"].get("num_workers", 4)
         self.val_split = self.config["data"].get("validation_split", 0.2)
+        self.test_split = self.config["data"].get("test_split", 0.0)
         self.shuffle = self.config["data"].get("shuffle", False)
         self._persist_workers = True if self.num_workers > 0 else False
 
@@ -60,6 +60,7 @@ class ImageDataModule(pl.LightningDataModule):
                 Resize(self.img_size, self.img_size),
                 Normalize(mean=self.NORMALIZE_MEAN, std=self.NORMALIZE_STD),
                 ToTensorV2(),
+
             ]
         )
         self.validation_transforms = Compose(
@@ -75,15 +76,17 @@ class ImageDataModule(pl.LightningDataModule):
         # Calculate split sizes:
         _total_size = len(ds)
         _val_size = int(_total_size * self.val_split)
-        _train_size = _total_size - _val_size
+        _test_size = int(_total_size * self.test_split)
+        _train_size = _total_size - (_val_size + _test_size)
         # Apply random split:
-        self.train_dataset, self.val_dataset = random_split(
+        self.train_dataset, self.val_dataset, self.test_dataset = random_split(
             dataset=ds,
-            lengths=[_train_size, _val_size],
+            lengths=[_train_size, _val_size, _test_size],
         )
         # Pass transforms to datasets:
         self.train_dataset.dataset.transforms = self.training_transforms
         self.val_dataset.dataset.transforms = self.validation_transforms
+        self.test_dataset.dataset.transforms = self.validation_transforms
 
     def train_dataloader(self) -> DataLoader:
         dataset = DataLoader(
@@ -92,6 +95,7 @@ class ImageDataModule(pl.LightningDataModule):
             shuffle=self.shuffle,
             num_workers=self.num_workers,
             persistent_workers=self._persist_workers,
+            pin_memory=True,
         )
         return dataset
 
@@ -102,5 +106,17 @@ class ImageDataModule(pl.LightningDataModule):
             shuffle=False,
             num_workers=self.num_workers,
             persistent_workers=self._persist_workers,
+            pin_memory=True,
+        )
+        return dataset
+    
+    def test_dataloader(self) -> DataLoader:
+        dataset = DataLoader(
+            dataset=self.test_dataset,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+            persistent_workers=self._persist_workers,
+            pin_memory=True,
         )
         return dataset

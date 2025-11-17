@@ -139,7 +139,6 @@ venv.bak/
 /site
 
 src/data/*
-src/logs/*
 src/checkpoints/*
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can

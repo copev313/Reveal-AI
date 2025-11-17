@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import pytorch_lightning as pl
 import timm
-from torchmetrics.functional import accuracy, f1_score
+from torchmetrics.functional import accuracy
 
 
 class ImageClassifier(pl.LightningModule):
@@ -29,13 +29,12 @@ class ImageClassifier(pl.LightningModule):
         out = self.backbone(x)
         return out
 
-    def _add_metrics(self, preds, labels):
+    def _calc_metrics(self, preds, labels):
         """Calculate accuracy and F1 score."""
         n_classes = self.num_classes
         task_type = "multiclass" if n_classes > 2 else "binary"
         acc = accuracy(preds, labels, task=task_type, num_classes=n_classes)
-        f1 = f1_score(preds, labels, task=task_type, num_classes=n_classes)
-        return acc, f1
+        return acc
 
     def _common_step(self, batch, batch_idx, stage: str):
         images, labels = batch
@@ -46,10 +45,9 @@ class ImageClassifier(pl.LightningModule):
         # Highest prob. class wins:
         preds = torch.argmax(logits, dim=1)
         # Calculate metrics:
-        acc, _ = self._add_metrics(preds, labels)
+        acc = self._calc_metrics(preds, labels)
         self.log(f"{stage}_loss", loss, prog_bar=True, on_step=False, on_epoch=True)
         self.log(f"{stage}_acc", acc, prog_bar=True, on_step=False, on_epoch=True)
-        # self.log(f"{stage}_f1", f1, prog_bar=True, on_step=False, on_epoch=True)
         return loss
 
     def training_step(self, batch, batch_idx):
@@ -57,6 +55,9 @@ class ImageClassifier(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         return self._common_step(batch, batch_idx, stage="val")
+
+    def test_step(self, batch, batch_idx):
+        return self._common_step(batch, batch_idx, stage="test")
 
     def configure_optimizers(self):
         # Select optimizer by name:
