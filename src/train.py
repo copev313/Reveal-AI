@@ -1,13 +1,13 @@
+import torch
 import pytorch_lightning as pl
-
 from pytorch_lightning.loggers import CSVLogger
 from pytorch_lightning.callbacks import (
     LearningRateMonitor,
     ModelCheckpoint,
     EarlyStopping,
 )
-from utils.helpers import load_config
 
+from utils.helpers import load_config
 from training.dataset import ImageDataModule
 from models.classification_model import ImageClassifier
 
@@ -15,26 +15,23 @@ from models.classification_model import ImageClassifier
 
 
 def main(config_path: str):
+    torch.set_float32_matmul_precision("high")
     # Load config:
     config = load_config(config_path)
-
-    # Set seed:
     pl.seed_everything(config.get("seed"))
 
-    # Prepare data:
-    data_module = ImageDataModule(config)
-
-    # Initialize model:
-    net = ImageClassifier(config)
-
-    # Setup logging:
     logger = CSVLogger(
+        name=config.get("experiment_name"),
         save_dir=config["logging"].get("logs_dir", "logs"),
     )
 
+    # Prepare data:
+    data_module = ImageDataModule(config)
+    # Initialize model:
+    net = ImageClassifier(config)
+
     # Setup callbacks:
     callbacks = []
-
     # Enable learning rate monitoring hook:
     if config["training"].get("lr_monitoring"):
         monitor_lr = LearningRateMonitor(logging_interval="epoch")
@@ -75,13 +72,16 @@ def main(config_path: str):
         log_every_n_steps=5,
         callbacks=callbacks,
     )
-
     # Begin training:
     trainer.fit(
         model=net,
         datamodule=data_module,
-        # Resume from an existing checkpoint:
-        # ckpt_path='checkpoints/last.ckpt'
+    )
+    # Test model performance:
+    trainer.test(
+        datamodule=data_module,
+        # Use the last checkpoint for testing:
+        ckpt_path="src/checkpoints/last.ckpt",
     )
 
 
