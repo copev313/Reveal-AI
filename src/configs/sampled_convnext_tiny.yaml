@@ -1,16 +1,17 @@
-experiment_name: 'chameleon_convnext_tiny'
+experiment_name: 'sampled_convnext_tiny'
 
 data:
-  path: src/data/chameleon
-  # training_path:
-  # validation_path:
-  # test_path:
+  # path: src/data/chameleon
+  training_path: src/data/sampled/train
+  validation_path: src/data/sampled/validation
+  test_path: src/data/sampled/test
   batch_size: 96
   num_workers: 4
-  validation_split: 0.2
-  test_split: 0.1
   image_size: 224
   shuffle: true
+  # validation_split: 0.2
+  # test_split: 0.1
+  
 
 model:
   name: 'convnext_tiny'
@@ -20,10 +21,10 @@ model:
 training:
   optimizer_type: 'adamw'
   # scheduler_type: 'cosine'
-  learning_rate: 1e-4
+  learning_rate: 1e-5
   # step_size: 1
   # gamma: 0.5
-  weight_decay: 0.0001
+  weight_decay: 1e-4
   min_epochs: 3
   max_epochs: 5
   lr_monitoring: true

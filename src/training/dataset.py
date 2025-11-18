@@ -18,6 +18,22 @@ class CustomImageDataset(Dataset):
         self.transforms = transforms
         self.img_folder = ImageFolder(root=self.root_dir)
         self.samples = self.img_folder.samples
+        self._corrupted_files = []
+
+        # Check for corrupted images:
+        valid_samples = []
+        for path, target in self.samples:
+            try:
+                with Image.open(path) as img:
+                    img.verify()
+                    # img.convert("RGB")
+                    
+                valid_samples.append((path, target))
+            except Exception as e:
+                self._corrupted_files.append(path)
+        
+        self.samples = valid_samples
+        print(f"[NOTICE] Found {len(self._corrupted_files)} corrupted files in {self.root_dir}.")
 
     def __len__(self):
         return len(self.samples)
@@ -45,9 +61,12 @@ class ImageDataModule(pl.LightningDataModule):
     def __init__(self, config: dict):
         super().__init__()
         self.config = config
-        self.data_dir = self.config["data"]["path"]
-        self.batch_size = self.config["data"]["batch_size"]
         self.img_size = self.config["data"]["image_size"]
+        self.data_dir = self.config["data"].get("path")
+        self.training_path = self.config["data"].get("training_path")
+        self.validation_path = self.config["data"].get("validation_path")
+        self.test_path = self.config["data"].get("test_path")
+        self.batch_size = self.config["data"].get("batch_size", 64)
         self.num_workers = self.config["data"].get("num_workers", 4)
         self.val_split = self.config["data"].get("validation_split", 0.2)
         self.test_split = self.config["data"].get("test_split", 0.0)
@@ -71,22 +90,34 @@ class ImageDataModule(pl.LightningDataModule):
             ]
         )
 
-    def setup(self, stage: str | None = None) -> None:
-        ds = CustomImageDataset(root_dir=self.data_dir)
-        # Calculate split sizes:
-        _total_size = len(ds)
-        _val_size = int(_total_size * self.val_split)
-        _test_size = int(_total_size * self.test_split)
-        _train_size = _total_size - (_val_size + _test_size)
-        # Apply random split:
-        self.train_dataset, self.val_dataset, self.test_dataset = random_split(
-            dataset=ds,
-            lengths=[_train_size, _val_size, _test_size],
-        )
-        # Pass transforms to datasets:
-        self.train_dataset.dataset.transforms = self.training_transforms
-        self.val_dataset.dataset.transforms = self.validation_transforms
-        self.test_dataset.dataset.transforms = self.validation_transforms
+    def setup(self, stage: str | None = None):
+        # [CASE] Predefined splits:
+        if self.training_path and self.validation_path:
+            self.train_dataset = CustomImageDataset(root_dir=self.training_path)
+            self.val_dataset = CustomImageDataset(root_dir=self.validation_path)
+            self.train_dataset.transforms = self.training_transforms
+            self.val_dataset.transforms = self.validation_transforms
+            self.test_dataset = None
+            if self.test_path:
+                self.test_dataset = CustomImageDataset(root_dir=self.test_path)
+                self.test_dataset.transforms = self.validation_transforms
+        # [CASE] Single directory -> perform ratio split:
+        elif self.data_dir:
+            ds = CustomImageDataset(root_dir=self.data_dir)
+            # Calculate split sizes:
+            _total_size = len(ds)
+            _val_size = int(_total_size * self.val_split)
+            _test_size = int(_total_size * self.test_split)
+            _train_size = _total_size - (_val_size + _test_size)
+            # Apply random split:
+            self.train_dataset, self.val_dataset, self.test_dataset = random_split(
+                dataset=ds,
+                lengths=[_train_size, _val_size, _test_size],
+            )
+            # Pass transforms to datasets:
+            self.train_dataset.dataset.transforms = self.training_transforms
+            self.val_dataset.dataset.transforms = self.validation_transforms
+            self.test_dataset.dataset.transforms = self.validation_transforms
 
     def train_dataloader(self) -> DataLoader:
         dataset = DataLoader(
