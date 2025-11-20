@@ -1,7 +1,6 @@
 experiment_name: 'sampled_convnext_tiny'
 
 data:
-  # path: src/data/chameleon
   training_path: src/data/sampled/train
   validation_path: src/data/sampled/validation
   test_path: src/data/sampled/test
@@ -9,9 +8,6 @@ data:
   num_workers: 4
   image_size: 224
   shuffle: true
-  # validation_split: 0.2
-  # test_split: 0.1
-  
 
 model:
   name: 'convnext_tiny'
