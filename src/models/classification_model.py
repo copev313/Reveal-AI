@@ -93,6 +93,15 @@ class ImageClassifier(pl.LightningModule):
                 step_size=self.config["training"].get("step_size", 10),
                 gamma=self.config["training"].get("gamma", 0.1),
             )
+        elif self.sched_name == "plateau":
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                optimizer=optimizer,
+                mode="min",
+                factor=self.config["training"].get("factor", 0.1),
+                patience=self.config["training"].get("patience", 5),
+                threshold=self.config["training"].get("threshold", 1e-4),
+                min_lr=self.config["training"].get("min_lr", 0),
+            )
         elif self.sched_name == "cosine":
             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
                 optimizer=optimizer,
@@ -101,4 +110,13 @@ class ImageClassifier(pl.LightningModule):
         else:
             raise NotImplementedError(f"Scheduler '{self.sched_name}' not implemented.")
 
-        return {"optimizer": optimizer, "lr_scheduler": scheduler}
+        # REF: https://lightning.ai/docs/pytorch/stable/common/lightning_module.html#configure-optimizers
+        return {
+            "optimizer": optimizer, 
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "monitor": "val_loss" if self.sched_name == "plateau" else None,
+                "interval": "epoch",
+                "frequency": 1,
+            },
+        }
