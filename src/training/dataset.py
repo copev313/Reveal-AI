@@ -1,21 +1,39 @@
 import os
 import torch
 import pytorch_lightning as pl
-from torch.utils.data import DataLoader, random_split, Dataset
+import numpy as np
 from torchvision.datasets import ImageFolder
+from torch.utils.data import DataLoader, random_split, Dataset, WeightedRandomSampler
+# from torchvision import transforms
 from PIL import Image
-import albumentations as A
+from albumentations import Compose, Resize, Normalize
 from albumentations.pytorch import ToTensorV2
 
 
 class CustomImageDataset(Dataset):
     """Dataset for loading images from a directory structure."""
 
-    def __init__(self, root_dir: str):
+    def __init__(self, root_dir: str, transforms=None):
         self.root_dir = root_dir
+        self.transforms = transforms
         self.img_folder = ImageFolder(root=self.root_dir)
-        self.samples = self.image_folder.samples
-        # ...
+        self.samples = self.img_folder.samples
+        self._corrupted_files = []
+
+        # Check for corrupted images:
+        valid_samples = []
+        for path, target in self.samples:
+            try:
+                with Image.open(path) as img:
+                    img.verify()
+                    # img.convert("RGB")
+                    
+                valid_samples.append((path, target))
+            except Exception as e:
+                self._corrupted_files.append(path)
+        
+        self.samples = valid_samples
+        print(f"[NOTICE] Found {len(self._corrupted_files)} corrupted files in {self.root_dir}.")
 
     def __len__(self):
         return len(self.samples)
@@ -23,30 +41,113 @@ class CustomImageDataset(Dataset):
     def __getitem__(self, idx):
         path, target = self.samples[idx]
         image = Image.open(path).convert("RGB")
-        # ...
+        img_arr = np.array(image)
+        # Apply transformations (if applicable):
+        if self.transforms:
+            aug = self.transforms(image=img_arr)
+            image = aug["image"]
+        else:
+            image = ToTensorV2()(image=img_arr)["image"]
+
         return image, target
 
 
 class ImageDataModule(pl.LightningDataModule):
     """Prepares data for training and validation, applying necessary transformations."""
 
-    def __init__(self, config):
+    NORMALIZE_MEAN = [0.485, 0.456, 0.406]
+    NORMALIZE_STD = [0.229, 0.224, 0.225]
+
+    def __init__(self, config: dict):
         super().__init__()
         self.config = config
-        self.data_dir = self.config["data"]["path"]
-        self.batch_size = self.config["data"]["batch_size"]
-        self.num_workers = self.config["data"]["num_workers"]
-        self.val_split = self.config["data"]["validation_split"]
-        self.transforms = None
+        self.img_size = self.config["data"]["image_size"]
+        self.data_dir = self.config["data"].get("path")
+        self.training_path = self.config["data"].get("training_path")
+        self.validation_path = self.config["data"].get("validation_path")
+        self.test_path = self.config["data"].get("test_path")
+        self.batch_size = self.config["data"].get("batch_size", 64)
+        self.num_workers = self.config["data"].get("num_workers", 4)
+        self.val_split = self.config["data"].get("validation_split", 0.2)
+        self.test_split = self.config["data"].get("test_split", 0.0)
+        self.shuffle = self.config["data"].get("shuffle", False)
+        self._persist_workers = True if self.num_workers > 0 else False
 
-    def setup(self, stage=None):
-        # ...
-        pass
+        # Define transformations:
+        self.training_transforms = Compose(
+            [
+                Resize(self.img_size, self.img_size),
+                Normalize(mean=self.NORMALIZE_MEAN, std=self.NORMALIZE_STD),
+                ToTensorV2(),
 
-    def train_dataloader(self):
-        # ...
-        pass
+            ]
+        )
+        self.validation_transforms = Compose(
+            [
+                Resize(self.img_size, self.img_size),
+                Normalize(mean=self.NORMALIZE_MEAN, std=self.NORMALIZE_STD),
+                ToTensorV2(),
+            ]
+        )
 
-    def val_dataloader(self):
-        # ...
-        pass
+    def setup(self, stage: str | None = None):
+        # [CASE] Predefined splits:
+        if self.training_path and self.validation_path:
+            self.train_dataset = CustomImageDataset(root_dir=self.training_path)
+            self.val_dataset = CustomImageDataset(root_dir=self.validation_path)
+            self.train_dataset.transforms = self.training_transforms
+            self.val_dataset.transforms = self.validation_transforms
+            self.test_dataset = None
+            if self.test_path:
+                self.test_dataset = CustomImageDataset(root_dir=self.test_path)
+                self.test_dataset.transforms = self.validation_transforms
+        # [CASE] Single directory -> perform ratio split:
+        elif self.data_dir:
+            ds = CustomImageDataset(root_dir=self.data_dir)
+            # Calculate split sizes:
+            _total_size = len(ds)
+            _val_size = int(_total_size * self.val_split)
+            _test_size = int(_total_size * self.test_split)
+            _train_size = _total_size - (_val_size + _test_size)
+            # Apply random split:
+            self.train_dataset, self.val_dataset, self.test_dataset = random_split(
+                dataset=ds,
+                lengths=[_train_size, _val_size, _test_size],
+            )
+            # Pass transforms to datasets:
+            self.train_dataset.dataset.transforms = self.training_transforms
+            self.val_dataset.dataset.transforms = self.validation_transforms
+            self.test_dataset.dataset.transforms = self.validation_transforms
+
+    def train_dataloader(self) -> DataLoader:
+        dataset = DataLoader(
+            dataset=self.train_dataset,
+            batch_size=self.batch_size,
+            shuffle=self.shuffle,
+            num_workers=self.num_workers,
+            persistent_workers=self._persist_workers,
+            pin_memory=True,
+        )
+        return dataset
+
+    def val_dataloader(self) -> DataLoader:
+        dataset = DataLoader(
+            dataset=self.val_dataset,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+            persistent_workers=self._persist_workers,
+            pin_memory=True,
+        )
+        return dataset
+    
+    def test_dataloader(self) -> DataLoader:
+        dataset = DataLoader(
+            dataset=self.test_dataset,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+            persistent_workers=self._persist_workers,
+            pin_memory=True,
+        )
+        return dataset

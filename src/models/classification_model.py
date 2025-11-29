@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import pytorch_lightning as pl
 import timm
-from torchmetrics.functional import accuracy, f1_score
+from torchmetrics.functional import accuracy
 
 
 class ImageClassifier(pl.LightningModule):
@@ -12,47 +12,42 @@ class ImageClassifier(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
         self.config = config
-        self.lr = self.config["training"].get("learning_rate", 5e-4)
-        self.opt_name = self.config["training"].get("optimizer_type", "adam").lower()
-        self.wt_decay = self.config["training"].get("weight_decay", 0.0)
+        self.lr = float(self.config["training"].get("learning_rate", 1e-4))
+        self.opt_name = self.config["training"].get("optimizer_type", "adamw").lower()
+        self.wt_decay = float(self.config["training"].get("weight_decay", 0))
         self.sched_name = self.config["training"].get("scheduler_type", "").lower()
         self.loss_func = nn.CrossEntropyLoss()
 
         self.num_classes = self.config["model"].get("num_classes", 0)
         self.backbone = timm.create_model(
             model_name=self.config["model"]["name"],
-            pretrained=self.config["model"].get("pretrained", True),
+            pretrained=self.config["model"].get("pretrained", False),
             num_classes=self.num_classes,
         )
-        self.custom_head = None
 
     def forward(self, x):
-        feats_out = self.backbone(x)
-        # TODO: Potentially add custom head...
-        # ...
-        return feats_out
+        out = self.backbone(x)
+        return out
 
-    def _add_metrics(self, preds, labels) -> tuple[float, float]:
+    def _calc_metrics(self, preds, labels):
         """Calculate accuracy and F1 score."""
         n_classes = self.num_classes
-        task = "binary" if n_classes == 2 else "multiclass"
-        acc = accuracy(preds, labels, task=task, num_classes=n_classes)
-        f1 = f1_score(preds, labels, task=task, num_classes=n_classes)
-        return acc, f1
+        task_type = "multiclass" if n_classes > 2 else "binary"
+        acc = accuracy(preds, labels, task=task_type, num_classes=n_classes)
+        return acc
 
     def _common_step(self, batch, batch_idx, stage: str):
         images, labels = batch
         # Forward pass:
-        outputs = self(images)
-        # Best class wins:
-        preds = torch.argmax(outputs, dim=1)
+        logits = self(images)
         # Calculate loss:
-        loss = self.loss_func(preds, labels)
+        loss = self.loss_func(logits, labels)
+        # Highest prob. class wins:
+        preds = torch.argmax(logits, dim=1)
         # Calculate metrics:
-        acc, f1 = self._add_metrics(preds, labels)
+        acc = self._calc_metrics(preds, labels)
         self.log(f"{stage}_loss", loss, prog_bar=True, on_step=False, on_epoch=True)
         self.log(f"{stage}_acc", acc, prog_bar=True, on_step=False, on_epoch=True)
-        self.log(f"{stage}_f1", f1, prog_bar=True, on_step=False, on_epoch=True)
         return loss
 
     def training_step(self, batch, batch_idx):
@@ -60,6 +55,9 @@ class ImageClassifier(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         return self._common_step(batch, batch_idx, stage="val")
+
+    def test_step(self, batch, batch_idx):
+        return self._common_step(batch, batch_idx, stage="test")
 
     def configure_optimizers(self):
         # Select optimizer by name:
@@ -95,6 +93,15 @@ class ImageClassifier(pl.LightningModule):
                 step_size=self.config["training"].get("step_size", 10),
                 gamma=self.config["training"].get("gamma", 0.1),
             )
+        elif self.sched_name == "plateau":
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                optimizer=optimizer,
+                mode="min",
+                factor=self.config["training"].get("factor", 0.1),
+                patience=self.config["training"].get("patience", 5),
+                threshold=self.config["training"].get("threshold", 1e-4),
+                min_lr=self.config["training"].get("min_lr", 0),
+            )
         elif self.sched_name == "cosine":
             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
                 optimizer=optimizer,
@@ -103,4 +110,13 @@ class ImageClassifier(pl.LightningModule):
         else:
             raise NotImplementedError(f"Scheduler '{self.sched_name}' not implemented.")
 
-        return {"optimizer": optimizer, "lr_scheduler": scheduler}
+        # REF: https://lightning.ai/docs/pytorch/stable/common/lightning_module.html#configure-optimizers
+        return {
+            "optimizer": optimizer, 
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "monitor": "val_loss" if self.sched_name == "plateau" else None,
+                "interval": "epoch",
+                "frequency": 1,
+            },
+        }
