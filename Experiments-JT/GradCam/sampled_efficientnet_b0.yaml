@@ -1,0 +1,37 @@
+experiment_name: 'sampled_efficientnet_b0_jt'
+
+data:
+  training_path: ../../src/data/sampled/train
+  validation_path: ../../src/data/sampled/validation
+  test_path: ../../src/data/sampled/test
+  batch_size: 96
+  num_workers: 4
+  image_size: 224
+  shuffle: true
+
+model:
+  name: 'efficientnet_b0'
+  pretrained: true
+  num_classes: 2
+
+training:
+  optimizer_type: 'adamw'
+  # scheduler_type: 'cosine'
+  learning_rate: 3e-5
+  # step_size: 1
+  # gamma: 0.5
+  weight_decay: 5e-4
+  min_epochs: 5
+  max_epochs: 10
+  lr_monitoring: true
+  early_stopping:
+    enabled: true
+    patience: 3
+    monitor: 'val_loss'
+    mode: 'min'
+
+seed: 7643
+logging:
+  type: 'CSV'
+  checkpoint_dir: checkpoints
+  logs_dir: logs

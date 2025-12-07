@@ -1,0 +1,31 @@
+config:
+  data:
+    batch_size: 96
+    image_size: 224
+    num_workers: 4
+    path: src/data/chameleon
+    shuffle: true
+    test_split: 0.1
+    validation_split: 0.2
+  experiment_name: chameleon_convnext_tiny
+  logging:
+    checkpoint_dir: src/checkpoints
+    logs_dir: src/logs
+    type: CSV
+  model:
+    name: convnext_tiny
+    num_classes: 2
+    pretrained: true
+  seed: 7643
+  training:
+    early_stopping:
+      enabled: true
+      mode: min
+      monitor: val_loss
+      patience: 3
+    learning_rate: 1e-4
+    lr_monitoring: true
+    max_epochs: 5
+    min_epochs: 3
+    optimizer_type: adamw
+    weight_decay: 0.0001
