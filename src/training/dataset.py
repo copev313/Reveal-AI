@@ -49,7 +49,7 @@ class CustomImageDataset(Dataset):
         else:
             image = ToTensorV2()(image=img_arr)["image"]
 
-        return image, target
+        return image, target, path
 
 
 class ImageDataModule(pl.LightningDataModule):
@@ -118,7 +118,10 @@ class ImageDataModule(pl.LightningDataModule):
             self.train_dataset.dataset.transforms = self.training_transforms
             self.val_dataset.dataset.transforms = self.validation_transforms
             self.test_dataset.dataset.transforms = self.validation_transforms
-
+    
+    def predict_dataloader(self): 
+        return self.test_dataloader()
+    
     def train_dataloader(self) -> DataLoader:
         dataset = DataLoader(
             dataset=self.train_dataset,

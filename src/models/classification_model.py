@@ -59,6 +59,17 @@ class ImageClassifier(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         return self._common_step(batch, batch_idx, stage="test")
 
+    def predict_step(self, batch, batch_idx, dataloader_idx=0):
+        images, labels, paths = batch
+        logits = self(images)
+        preds = torch.argmax(logits, dim=1)
+
+        return {
+            "paths": list(paths),
+            "true": labels.cpu(),
+            "pred": preds.cpu(),
+        }
+
     def configure_optimizers(self):
         # Select optimizer by name:
         if self.opt_name == "adam":
