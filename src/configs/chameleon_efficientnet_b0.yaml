@@ -1,0 +1,35 @@
+experiment_name: 'chameleon_efficientnet_b0'
+
+data:
+  path: src/data/chameleon
+  batch_size: 96
+  num_workers: 4
+  image_size: 224
+  shuffle: true
+  validation_split: 0.2
+  test_split: 0.1
+  
+
+model:
+  name: 'efficientnet_b0'
+  pretrained: true
+  num_classes: 2
+
+training:
+  optimizer_type: 'adamw'
+  learning_rate: 3e-5
+  weight_decay: 5e-4
+  min_epochs: 5
+  max_epochs: 10
+  lr_monitoring: true
+  early_stopping:
+    enabled: true
+    patience: 3
+    monitor: 'val_loss'
+    mode: 'min'
+
+seed: 7643
+logging:
+  type: 'CSV'
+  checkpoint_dir: src/checkpoints
+  logs_dir: src/logs
