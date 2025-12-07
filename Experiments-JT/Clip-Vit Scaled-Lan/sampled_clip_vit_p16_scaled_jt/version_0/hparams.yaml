@@ -1,0 +1,31 @@
+config:
+  data:
+    batch_size: 96
+    image_size: 224
+    num_workers: 4
+    shuffle: true
+    test_path: ../../src/data/scaled-lan/test
+    training_path: ../../src/data/scaled-lan/train
+    validation_path: ../../src/data/scaled-lan/validation
+  experiment_name: sampled_clip_vit_p16_scaled_jt
+  logging:
+    checkpoint_dir: checkpoints
+    logs_dir: .
+    type: CSV
+  model:
+    name: vit_base_patch16_clip_224
+    num_classes: 2
+    pretrained: true
+  seed: 7643
+  training:
+    early_stopping:
+      enabled: true
+      mode: min
+      monitor: val_loss
+      patience: 3
+    learning_rate: 1e-5
+    lr_monitoring: true
+    max_epochs: 5
+    min_epochs: 3
+    optimizer_type: adamw
+    weight_decay: 5e-4

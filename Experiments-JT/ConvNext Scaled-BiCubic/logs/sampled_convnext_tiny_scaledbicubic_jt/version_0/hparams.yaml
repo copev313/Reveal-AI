@@ -1,0 +1,31 @@
+config:
+  data:
+    batch_size: 96
+    image_size: 224
+    num_workers: 4
+    shuffle: true
+    test_path: ../../src/data/scaled-bicubic/test
+    training_path: ../../src/data/scaled-bicubic/train
+    validation_path: ../../src/data/scaled-bicubic/validation
+  experiment_name: sampled_convnext_tiny_scaledbicubic_jt
+  logging:
+    checkpoint_dir: checkpoints
+    logs_dir: logs
+    type: CSV
+  model:
+    name: convnext_tiny
+    num_classes: 2
+    pretrained: true
+  seed: 7643
+  training:
+    early_stopping:
+      enabled: true
+      mode: min
+      monitor: val_loss
+      patience: 3
+    learning_rate: 1e-5
+    lr_monitoring: true
+    max_epochs: 5
+    min_epochs: 3
+    optimizer_type: adamw
+    weight_decay: 1e-4
